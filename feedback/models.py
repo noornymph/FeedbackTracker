@@ -27,8 +27,9 @@ class Reaction(models.Model):
 
 class TaggedUser(models.Model):
     feedback = models.ForeignKey(Feedback, on_delete=models.CASCADE, related_name="tagged_users")
-    user = models.ForeignKey(SlackUser, on_delete=models.CASCADE)
-    username_mentioned = models.CharField(max_length=100)  # The username mentioned in the message
+    user = models.ForeignKey(SlackUser, on_delete=models.CASCADE)  # The actual user object
+    username_mentioned = models.CharField(max_length=100)  # The username in the message
+    slack_id_mentioned = models.CharField(max_length=50, null=True, blank=True)  # Allow null initially
 
     def __str__(self):
-        return f"{self.user.username} was tagged in {self.feedback.message[:20]}"
+        return f"{self.user.username} ({self.slack_id_mentioned}) was tagged in {self.feedback.message[:20]}"
