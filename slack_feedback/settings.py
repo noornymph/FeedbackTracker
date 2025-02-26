@@ -29,8 +29,8 @@ ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 SITE_ID = 1
 
 # Authentication Redirects
-LOGIN_REDIRECT_URL = "/dashboard/"
-LOGOUT_REDIRECT_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/oauth/success/"
+LOGOUT_REDIRECT_URL = "http://localhost:5173/login"
 
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = "http"
 
@@ -88,6 +88,7 @@ SOCIALACCOUNT_PROVIDERS = {
         "SCOPE": ["profile", "email", "openid"],
         "OAUTH_PKCE_ENABLED": True,
         "AUTH_PARAMS": {"access_type": "offline"},  # Ensures persistent access
+        "CALLBACK_URL": "http://localhost:8000/accounts/google/login/callback/",
     }
 }
 
@@ -165,4 +166,12 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Headers
+CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
+CSRF_TRUSTED_ORIGINS = ["http://localhost:5173"]
+CORS_ALLOW_CREDENTIALS = True
+# You might want to change this to False in production and only use specific origins
 CORS_ALLOW_ALL_ORIGINS = True
+
+# Session settings
+SESSION_COOKIE_SAMESITE = 'Lax'  # Use 'None' if your frontend and backend are on different domains
+SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS

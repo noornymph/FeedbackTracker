@@ -9,6 +9,8 @@ from django.conf import settings
 from rest_framework import viewsets
 from .serializers import FeedbackSerializer
 from django.db.models import Prefetch
+from django.urls import reverse
+from django.shortcuts import redirect
 
 SLACK_VERIFICATION_TOKEN = settings.SLACK_BOT_TOKEN  # From Slack settings
 
@@ -159,3 +161,92 @@ def get_mentions(request):
 class FeedbackViewSet(viewsets.ModelViewSet):
     queryset = Feedback.objects.all()
     serializer_class = FeedbackSerializer
+
+@csrf_exempt
+def auth_callback(request):
+    """Handle OAuth callback and return user ID"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            code = data.get('code')
+            
+            # Process the OAuth code and get user info
+            # This is a simplified example - you'd need to implement the actual OAuth flow
+            
+            # Return the user's Slack ID that can be used for API calls
+            user = request.user
+            slack_user = SlackUser.objects.filter(username=user.email.split('@')[0]).first()
+            
+            if slack_user:
+                return JsonResponse({
+                    "user_id": slack_user.slack_id,
+                    "username": slack_user.username
+                })
+            else:
+                # Create a new SlackUser if one doesn't exist
+                email_username = user.email.split('@')[0]
+                slack_user = SlackUser.objects.create(
+                    slack_id=f"temp_{user.id}",  # Temporary ID until real Slack ID is available
+                    username=email_username
+                )
+                return JsonResponse({
+                    "user_id": slack_user.slack_id,
+                    "username": slack_user.username
+                })
+                
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+            
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+@csrf_exempt
+def get_user_info(request):
+    """Get user info from session"""
+    if request.user.is_authenticated:
+        try:
+            # Try to find the Slack user associated with this Django user
+            email_username = request.user.email.split('@')[0]
+            slack_user = SlackUser.objects.filter(username=email_username).first()
+            
+            if slack_user:
+                return JsonResponse({
+                    "user_id": slack_user.slack_id,
+                    "username": slack_user.username,
+                    "email": request.user.email
+                })
+            else:
+                # Create a new SlackUser if one doesn't exist
+                slack_user = SlackUser.objects.create(
+                    slack_id=f"temp_{request.user.id}",  # Temporary ID until real Slack ID is available
+                    username=email_username
+                )
+                return JsonResponse({
+                    "user_id": slack_user.slack_id,
+                    "username": slack_user.username,
+                    "email": request.user.email
+                })
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+    
+    return JsonResponse({"error": "Not authenticated"}, status=401)
+
+def oauth_success(request):
+    """Redirect to frontend after successful OAuth login"""
+    return redirect("http://localhost:5173/feedbacks")
+
+@csrf_exempt
+def check_auth(request):
+    """Check if user is authenticated via session"""
+    if request.user.is_authenticated:
+        return JsonResponse({"authenticated": True})
+    return JsonResponse({"authenticated": False})
+
+@csrf_exempt
+def debug_session(request):
+    """Debug endpoint to check session state"""
+    return JsonResponse({
+        "authenticated": request.user.is_authenticated,
+        "user_id": request.user.id if request.user.is_authenticated else None,
+        "email": request.user.email if request.user.is_authenticated else None,
+        "session_key": request.session.session_key,
+    })
