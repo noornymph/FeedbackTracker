@@ -11,6 +11,8 @@ from .serializers import FeedbackSerializer
 from django.db.models import Prefetch
 from django.urls import reverse
 from django.shortcuts import redirect
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
 SLACK_VERIFICATION_TOKEN = settings.SLACK_BOT_TOKEN  # From Slack settings
 
@@ -201,31 +203,86 @@ def auth_callback(request):
 
 @csrf_exempt
 def get_user_info(request):
-    """Get user info from session"""
+    """Get user info from session and link with Slack ID"""
     if request.user.is_authenticated:
         try:
-            # Try to find the Slack user associated with this Django user
-            email_username = request.user.email.split('@')[0]
+            # Get email username
+            email = request.user.email
+            email_username = email.split('@')[0]
+            
+            # First, try to find a SlackUser by username
             slack_user = SlackUser.objects.filter(username=email_username).first()
             
-            if slack_user:
+            if slack_user and not slack_user.slack_id.startswith('temp_'):
+                # User already exists with a real Slack ID
                 return JsonResponse({
                     "user_id": slack_user.slack_id,
                     "username": slack_user.username,
-                    "email": request.user.email
+                    "email": email
                 })
-            else:
-                # Create a new SlackUser if one doesn't exist
-                slack_user = SlackUser.objects.create(
-                    slack_id=f"temp_{request.user.id}",  # Temporary ID until real Slack ID is available
-                    username=email_username
-                )
+            
+            # Need to fetch from Slack API
+            try:
+                # Disable SSL verification to work around certificate issues
+                import ssl
+                ssl._create_default_https_context = ssl._create_unverified_context
+                
+                # Initialize Slack client
+                slack_client = WebClient(token=settings.SLACK_BOT_TOKEN)
+                
+                # Look up user by email
+                slack_response = slack_client.users_lookupByEmail(email=email)
+                slack_id = slack_response['user']['id']
+                slack_username = slack_response['user']['name']
+                
+                # Update or create the SlackUser
+                if slack_user:
+                    # Update existing user
+                    slack_user.slack_id = slack_id
+                    slack_user.save()
+                else:
+                    # Create new user
+                    slack_user = SlackUser.objects.create(
+                        slack_id=slack_id,
+                        username=email_username
+                    )
+                
+                return JsonResponse({
+                    "user_id": slack_id,
+                    "username": slack_username,
+                    "email": email
+                })
+                
+            except Exception as slack_error:
+                print(f"Error fetching from Slack API: {slack_error}")
+                
+                # If we couldn't fetch from Slack, use a temporary ID
+                if not slack_user:
+                    # Create a new user with a unique temporary ID
+                    temp_id = f"temp_{request.user.id}"
+                    
+                    # Check if this temp_id already exists
+                    while SlackUser.objects.filter(slack_id=temp_id).exists():
+                        # If it exists, add a random suffix
+                        import random
+                        temp_id = f"temp_{request.user.id}_{random.randint(1000, 9999)}"
+                    
+                    slack_user = SlackUser.objects.create(
+                        slack_id=temp_id,
+                        username=email_username
+                    )
+                
                 return JsonResponse({
                     "user_id": slack_user.slack_id,
-                    "username": slack_user.username,
-                    "email": request.user.email
+                    "username": email_username,
+                    "email": email,
+                    "note": "Could not fetch real Slack ID"
                 })
+                
         except Exception as e:
+            import traceback
+            print(f"Error in get_user_info: {str(e)}")
+            print(traceback.format_exc())
             return JsonResponse({"error": str(e)}, status=400)
     
     return JsonResponse({"error": "Not authenticated"}, status=401)
