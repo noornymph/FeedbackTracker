@@ -26,7 +26,7 @@ DEBUG = True
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 # Site ID for Django Allauth
-SITE_ID = 1
+SITE_ID = 4
 
 # Authentication Redirects
 LOGIN_REDIRECT_URL = "/oauth/success/"

@@ -13,6 +13,7 @@ class Feedback(models.Model):
     sender = models.ForeignKey(SlackUser, on_delete=models.CASCADE, related_name="feedback_given")
     message = models.TextField()
     timestamp = models.DateTimeField()
+    source = models.CharField(max_length=50, default='slack')  # New field to track the source
 
     def __str__(self):
         return f"{self.sender} → {self.user}: {self.message[:20]}"

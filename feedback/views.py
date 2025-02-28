@@ -54,6 +54,7 @@ def slack_event_listener(request):
                     'timestamp': timestamp,
                     'user': slack_user,
                     'sender': slack_user,
+                    'source': 'slack',  # Set the source explicitly
                 }
             )
 
@@ -120,13 +121,15 @@ def get_mentions(request):
             mentioned_messages = TaggedUser.objects.filter(user=slack_user).select_related('feedback')
             feedback_qs = Feedback.objects.filter(id__in=mentioned_messages.values('feedback_id')) \
                                            .prefetch_related(
-                                               Prefetch('reactions', queryset=Reaction.objects.all())
-                                           )
+                                               Prefetch('reactions', queryset=Reaction.objects.all()),
+                                               Prefetch('tagged_users', queryset=TaggedUser.objects.select_related('user'))
+                                           ).select_related('sender', 'user')
             feedback_qs = Feedback.objects.filter(id__in=mentioned_messages.values('feedback_id'))\
                 .order_by("timestamp")\
                 .prefetch_related(
-                    Prefetch('reactions', queryset=Reaction.objects.all())
-                )
+                    Prefetch('reactions', queryset=Reaction.objects.select_related('user')),
+                    Prefetch('tagged_users', queryset=TaggedUser.objects.select_related('user'))
+                ).select_related('sender', 'user')
 
             # Paginate results (limit 20 mentions per page)
             paginator = Paginator(feedback_qs, 20)
@@ -135,17 +138,33 @@ def get_mentions(request):
             # Prepare response
             data = []
             for feedback in mentions_page:
-                reactions = [{"reaction": r.reaction, "user_id": r.user.slack_id} for r in feedback.reactions.all()]
+                reactions = [{"reaction": r.reaction, "user_id": r.user.slack_id, "username": r.user.username} for r in feedback.reactions.all()]
                 sender = {
                     "sender_id": feedback.sender.slack_id if feedback.sender else None,
                     "sender_username": feedback.sender.username if feedback.sender else "Unknown"
                 }
+                
+                # Get tagged users information
+                tagged_users = [
+                    {
+                        "user_id": tu.user.slack_id,
+                        "username": tu.user.username,
+                        "username_mentioned": tu.username_mentioned
+                    } for tu in feedback.tagged_users.all()
+                ]
+                
                 data.append({
                     "message": feedback.message,
                     "timestamp": feedback.timestamp,
                     "mentioned_in": feedback.slack_message_id,
                     "reactions": reactions,
-                    "sender": sender
+                    "sender": sender,
+                    "source": feedback.source,
+                    "tagged_users": tagged_users,
+                    "recipient": {
+                        "user_id": feedback.user.slack_id,
+                        "username": feedback.user.username
+                    }
                 })
 
             return JsonResponse({
