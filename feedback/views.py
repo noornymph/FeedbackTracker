@@ -119,11 +119,6 @@ def get_mentions(request):
 
             # Optimize query using prefetch_related for efficiency
             mentioned_messages = TaggedUser.objects.filter(user=slack_user).select_related('feedback')
-            feedback_qs = Feedback.objects.filter(id__in=mentioned_messages.values('feedback_id')) \
-                                           .prefetch_related(
-                                               Prefetch('reactions', queryset=Reaction.objects.all()),
-                                               Prefetch('tagged_users', queryset=TaggedUser.objects.select_related('user'))
-                                           ).select_related('sender', 'user')
             feedback_qs = Feedback.objects.filter(id__in=mentioned_messages.values('feedback_id'))\
                 .order_by("timestamp")\
                 .prefetch_related(
@@ -138,6 +133,26 @@ def get_mentions(request):
             # Prepare response
             data = []
             for feedback in mentions_page:
+                # Process the message to replace user IDs with usernames
+                processed_message = feedback.message
+                
+                # Find all user mentions in the format <@U12345678>
+                user_mentions = re.findall(r'<@([A-Z0-9]+)>', processed_message)
+                
+                # Replace each mention with the username
+                for mentioned_id in user_mentions:
+                    try:
+                        # Try to find the user in our database
+                        mentioned_user = SlackUser.objects.filter(slack_id=mentioned_id).first()
+                        if mentioned_user and mentioned_user.username:
+                            # Replace the ID with the username
+                            processed_message = processed_message.replace(
+                                f'<@{mentioned_id}>', 
+                                f'@{mentioned_user.username}'
+                            )
+                    except Exception as e:
+                        print(f"Error processing mention for {mentioned_id}: {e}")
+                
                 reactions = [{"reaction": r.reaction, "user_id": r.user.slack_id, "username": r.user.username} for r in feedback.reactions.all()]
                 sender = {
                     "sender_id": feedback.sender.slack_id if feedback.sender else None,
@@ -154,7 +169,8 @@ def get_mentions(request):
                 ]
                 
                 data.append({
-                    "message": feedback.message,
+                    "message": processed_message,  # Use the processed message with usernames
+                    "original_message": feedback.message,  # Keep the original message for reference
                     "timestamp": feedback.timestamp,
                     "mentioned_in": feedback.slack_message_id,
                     "reactions": reactions,
