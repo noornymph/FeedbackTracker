@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.shortcuts import redirect
 from rest_framework.routers import DefaultRouter
-from feedback.views import FeedbackViewSet, slack_event_listener, get_mentions, auth_callback, get_user_info, oauth_success, check_auth, debug_session
+from feedback.views import FeedbackViewSet, slack_event_listener, get_mentions, auth_callback, get_user_info, oauth_success, check_auth, debug_session, summarize_feedback
 
 router = DefaultRouter()
 router.register(r'feedbacks', FeedbackViewSet)
@@ -24,4 +24,5 @@ urlpatterns = [
     path('oauth/success/', oauth_success, name='oauth_success'),
     path('api/auth/check/', check_auth, name='check_auth'),
     path('api/debug/session/', debug_session, name='debug_session'),
+    path('api/feedback/summarize/', summarize_feedback, name='summarize_feedback'),
 ]

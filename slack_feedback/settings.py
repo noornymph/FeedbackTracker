@@ -99,6 +99,9 @@ SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = (
 )
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = "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"
 
+# In settings.py
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
 # Use custom SocialAccount Adapter
 SOCIALACCOUNT_ADAPTER = "feedback.adapters.MySocialAccountAdapter"
 

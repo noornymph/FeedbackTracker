@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.shortcuts import redirect
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+import openai
 
 SLACK_VERIFICATION_TOKEN = settings.SLACK_BOT_TOKEN  # From Slack settings
 
@@ -342,3 +343,100 @@ def debug_session(request):
         "email": request.user.email if request.user.is_authenticated else None,
         "session_key": request.session.session_key,
     })
+
+@csrf_exempt
+def summarize_feedback(request):
+    """
+    Accepts feedback data and username from the frontend and returns an AI-generated summary.
+    """
+    if request.method != 'POST':
+        return JsonResponse({"error": "Only POST method is allowed"}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        feedback_data = data.get('feedback', [])
+        username = data.get('username', 'the user')  # Get username from request
+        
+        if not feedback_data:
+            return JsonResponse({"error": "No feedback data provided"}, status=400)
+        
+        # Call the AI model to summarize the feedback
+        summary = generate_feedback_summary(feedback_data, username)
+        
+        return JsonResponse({
+            "summary": summary,
+            "feedback_count": len(feedback_data)
+        }, status=200)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        import traceback
+        print(f"Error in summarize_feedback: {str(e)}")
+        print(traceback.format_exc())
+        return JsonResponse({"error": str(e)}, status=500)
+
+def generate_feedback_summary(feedback_data, username):
+    """
+    Uses OpenAI API to generate a summary of all feedback for a specific user.
+    """
+    try:
+        client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        # Updated prompt to focus on individual user feedback analysis
+        prompt = (
+            f"Analyze the following feedback messages received by {username} and provide "
+            "a summary in markdown format with these sections:\n"
+            "# Personal Feedback Analysis\n\n"
+            "## Main Themes and Patterns\n"
+            f"[Analyze main themes in the feedback received by {username}]\n\n"
+            "## Key Strengths\n"
+            f"[List {username}'s key strengths based on the feedback]\n\n"
+            "## Areas for Improvement\n"
+            f"[List suggested areas where {username} could improve, based on the feedback]\n\n"
+            "## Personal Growth Trends\n"
+            f"[Analyze {username}'s growth and development trends based on the feedback]\n\n"
+            f"Note: This analysis is specifically about feedback received by {username}.\n\n"
+            "Feedback messages to analyze:\n\n"
+        )
+        
+        # Add all feedback messages to the prompt
+        for i, feedback in enumerate(feedback_data):
+            message_block = (
+                f"Message {i+1} (from {feedback.get('sender', 'Unknown')} "
+                f"on {feedback.get('timestamp', 'Unknown date')}):\n"
+                f"{feedback.get('message', '')}\n"
+            )
+            
+            reactions = feedback.get('reactions', [])
+            if reactions:
+                reaction_str = ', '.join(str(r) for r in reactions)
+                message_block += f"Reactions: {reaction_str}\n"
+            message_block += "\n"
+            
+            prompt += message_block
+        
+        # Updated system message to focus on personal feedback analysis
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Using the 16k model for larger context
+            messages=[
+                {
+                    "role": "system", 
+                    "content": (
+                        "You are an expert at analyzing personal professional feedback. "
+                        "Provide concise summaries focused on the individual's performance, strengths, "
+                        "and growth opportunities. Frame the analysis from the perspective of "
+                        "feedback received by the specific person."
+                    )
+                },
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1000,
+            temperature=0.7
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        print(f"Error generating feedback summary: {str(e)}")
+        return "Unable to generate summary due to an error. Please try again later."
