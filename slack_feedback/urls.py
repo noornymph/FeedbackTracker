@@ -9,12 +9,14 @@ router.register(r'feedbacks', FeedbackViewSet)
 
 
 def google_auto_login(request):
-    return redirect('http://127.0.0.1:8000/accounts/google/login/')
+    # Directly redirect to Google OAuth without showing intermediate pages
+    return redirect('/accounts/google/login/?process=login')
 
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/login/", google_auto_login),
+    path("accounts/social/signup/", google_auto_login),  # Add this to catch signup redirects
     path("accounts/", include("allauth.urls")),
     path('api/', include(router.urls)),
     path('slack/events/', slack_event_listener, name='slack_event_listener'),

@@ -73,22 +73,23 @@ AUTHENTICATION_BACKENDS = [
 # Django Allauth Configuration
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_AUTHENTICATION_METHOD = "email"
-ACCOUNT_EMAIL_VERIFICATION = "none"  # Change to "mandatory" if email verification is required
+ACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_REQUIRED = True
 SOCIALACCOUNT_QUERY_EMAIL = True
 SOCIALACCOUNT_AUTO_LINK = True  # Automatically links social accounts with matching email
 
 # Automatically link social accounts to existing users
 ACCOUNT_UNIQUE_EMAIL = True  # Ensures each email is unique across accounts
-SOCIALACCOUNT_AUTO_SIGNUP = True  # Allows auto-signup with social accounts
+SOCIALACCOUNT_AUTO_SIGNUP = True
 
 # Google OAuth Configuration
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "SCOPE": ["profile", "email", "openid"],
         "OAUTH_PKCE_ENABLED": True,
-        "AUTH_PARAMS": {"access_type": "offline"},  # Ensures persistent access
+        "AUTH_PARAMS": {"access_type": "offline"},
         "CALLBACK_URL": "http://localhost:8000/accounts/google/login/callback/",
+        "PROMPT_SELECT_ACCOUNT": True,  # Forces Google account selection each time
     }
 }
 
@@ -178,3 +179,9 @@ CORS_ALLOW_ALL_ORIGINS = True
 # Session settings
 SESSION_COOKIE_SAMESITE = 'Lax'  # Use 'None' if your frontend and backend are on different domains
 SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+
+# Add these settings
+SOCIALACCOUNT_LOGIN_ON_GET = True  # Removes the intermediate "Continue" page
+ACCOUNT_LOGOUT_ON_GET = True  # Removes the intermediate logout confirmation
+MESSAGE_STORAGE = 'django.contrib.messages.storage.cookie.CookieStorage'
+ACCOUNT_SESSION_REMEMBER = True
