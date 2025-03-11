@@ -14,93 +14,124 @@ from django.shortcuts import redirect
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 import openai
+from slack_sdk.signature import SignatureVerifier
+import logging
 
 SLACK_VERIFICATION_TOKEN = settings.SLACK_BOT_TOKEN  # From Slack settings
+logger = logging.getLogger(__name__)
 
 @csrf_exempt
 def slack_event_listener(request):
     """
-    Listens to Slack events like messages, message edits, and reactions.
+    Listens to Slack events and stores them in the database.
     """
     if request.method == 'POST':
-        data = json.loads(request.body)
+        try:
+            data = json.loads(request.body.decode('utf-8'))
+            logger.info("Received data: %s", data)
 
-        # Verify the request is coming from Slack
-        if data.get('token') != SLACK_VERIFICATION_TOKEN:
-            return JsonResponse({"error": "Invalid token"}, status=403)
+            # Handle URL verification challenge
+            if data.get('type') == 'url_verification':
+                return JsonResponse({'challenge': data.get('challenge')})
 
-        event = data.get('event', {})
+            # Handle actual events
+            if data.get('type') == 'event_callback':
+                event = data.get('event', {})
+                event_type = event.get('type')
+                
+                if event_type == 'message' and 'subtype' not in event:
+                    # Handle new message
+                    slack_message_id = event.get('ts')
+                    message_text = event.get('text')
+                    slack_user_id = event.get('user')
+                    timestamp = timezone.make_aware(timezone.datetime.fromtimestamp(float(slack_message_id)))
 
-        # Handle new messages
-        if event.get('type') == 'message' and 'subtype' not in event:
-            slack_message_id = event.get('ts')
-            message_text = event.get('text')
-            slack_user_id = event.get('user')
-            timestamp = timezone.make_aware(timezone.datetime.fromtimestamp(float(slack_message_id)))
+                    # Get or create the SlackUser
+                    slack_user, _ = SlackUser.objects.get_or_create(
+                        slack_id=slack_user_id,
+                        defaults={'username': ''}  # You might want to fetch the username from Slack API
+                    )
 
-            if not slack_user_id:
-                return JsonResponse({"error": "User ID missing"}, status=400)
+                    # Create or update the feedback message
+                    feedback_message, created = Feedback.objects.update_or_create(
+                        slack_message_id=slack_message_id,
+                        defaults={
+                            'message': message_text,
+                            'timestamp': timestamp,
+                            'user': slack_user,
+                            'sender': slack_user,
+                            'source': 'slack',
+                        }
+                    )
+                    logger.info(f"{'Created' if created else 'Updated'} message: {feedback_message.id}")
 
-            # Get or create the SlackUser
-            slack_user, _ = SlackUser.objects.get_or_create(
-                slack_id=slack_user_id,
-                defaults={'username': ''}
-            )
+                elif event_type == 'reaction_added':
+                    # Handle new reaction
+                    slack_message_id = event.get('item', {}).get('ts')
+                    reaction_name = event.get('reaction')
+                    reaction_user_id = event.get('user')
 
-            # Use update_or_create to store or update the message
-            feedback_message, created = Feedback.objects.update_or_create(
-                slack_message_id=slack_message_id,
-                defaults={
-                    'message': message_text,
-                    'timestamp': timestamp,
-                    'user': slack_user,
-                    'sender': slack_user,
-                    'source': 'slack',  # Set the source explicitly
-                }
-            )
+                    try:
+                        # Get the related message
+                        feedback_message = Feedback.objects.get(slack_message_id=slack_message_id)
+                        
+                        # Get or create the reaction user
+                        reaction_user, _ = SlackUser.objects.get_or_create(
+                            slack_id=reaction_user_id,
+                            defaults={'username': ''}
+                        )
 
-            # Extract and store mentioned users
-            user_mentions = re.findall(r'@(\w+)', message_text)
-            for mentioned_username in user_mentions:
-                mentioned_user, _ = SlackUser.objects.get_or_create(username=mentioned_username)
-                TaggedUser.objects.get_or_create(
-                    feedback=feedback_message,
-                    user=mentioned_user,
-                    username_mentioned=mentioned_username
-                )
+                        # Create the reaction
+                        reaction, created = Reaction.objects.get_or_create(
+                            feedback=feedback_message,
+                            user=reaction_user,
+                            reaction=reaction_name
+                        )
+                        logger.info(f"{'Created' if created else 'Updated'} reaction: {reaction.id}")
 
-        # Handle message updates
-        elif event.get('type') == 'message' and event.get('subtype') == 'message_changed':
-            slack_message_id = event.get('message', {}).get('ts')
-            new_text = event.get('message', {}).get('text')
+                    except Feedback.DoesNotExist:
+                        logger.error(f"Message not found for reaction: {slack_message_id}")
 
-            # Update the existing message
-            Feedback.objects.filter(slack_message_id=slack_message_id).update(message=new_text)
+                elif event_type == 'reaction_removed':
+                    # Handle reaction removal
+                    slack_message_id = event.get('item', {}).get('ts')
+                    reaction_name = event.get('reaction')
+                    reaction_user_id = event.get('user')
 
-        # Handle reactions
-        elif event.get('type') == 'reaction_added':
-            slack_message_id = event.get('item', {}).get('ts')
-            reaction_name = event.get('reaction')
-            reaction_user_id = event.get('user')
+                    try:
+                        feedback_message = Feedback.objects.get(slack_message_id=slack_message_id)
+                        reaction_user = SlackUser.objects.get(slack_id=reaction_user_id)
+                        
+                        # Delete the reaction
+                        Reaction.objects.filter(
+                            feedback=feedback_message,
+                            user=reaction_user,
+                            reaction=reaction_name
+                        ).delete()
+                        logger.info(f"Deleted reaction {reaction_name} from message {slack_message_id}")
 
-            if not slack_message_id or not reaction_name or not reaction_user_id:
-                return JsonResponse({"error": "Missing reaction data"}, status=400)
+                    except (Feedback.DoesNotExist, SlackUser.DoesNotExist) as e:
+                        logger.error(f"Error removing reaction: {str(e)}")
 
-            # Get or create SlackUser
-            reaction_user, _ = SlackUser.objects.get_or_create(slack_id=reaction_user_id)
+                elif event_type == 'message' and event.get('subtype') == 'message_deleted':
+                    # Handle message deletion
+                    deleted_ts = event.get('deleted_ts')
+                    try:
+                        Feedback.objects.filter(slack_message_id=deleted_ts).delete()
+                        logger.info(f"Deleted message {deleted_ts}")
+                    except Exception as e:
+                        logger.error(f"Error deleting message: {str(e)}")
 
-            # Fetch the related message
-            feedback_message = Feedback.objects.filter(slack_message_id=slack_message_id).first()
-            if feedback_message:
-                Reaction.objects.get_or_create(
-                    feedback=feedback_message,
-                    user=reaction_user,
-                    reaction=reaction_name
-                )
+            return JsonResponse({'status': 'ok'})
 
-        return JsonResponse({"status": "ok"})
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse JSON: %s", str(e))
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            logger.error("Unexpected error: %s", str(e))
+            return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({"error": "Invalid request"}, status=400)
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 @csrf_exempt
 def get_mentions(request):

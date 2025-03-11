@@ -23,14 +23,20 @@ SECRET_KEY = 'django-insecure-ut4(t#p=%z-tlvrj4bfdvkem=4um(iwc2u^4^7talmop4jve@^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+# Update ALLOWED_HOSTS to include your Zrok domain
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    'm96gdimbv8yr.share.zrok.io',  # Add your specific Zrok domain
+    '.share.zrok.io',  # This will allow any subdomain of share.zrok.io
+]
 
 # Site ID for Django Allauth
 SITE_ID = 4
 
 # Authentication Redirects
 LOGIN_REDIRECT_URL = "/oauth/success/"
-LOGOUT_REDIRECT_URL = "https://feedbackviewer.netlify.app/login"
+LOGOUT_REDIRECT_URL = "http://localhost:5173//login"
 
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = "http"
 
@@ -203,3 +209,24 @@ SOCIALACCOUNT_LOGIN_ON_GET = True  # Removes the intermediate "Continue" page
 ACCOUNT_LOGOUT_ON_GET = True  # Removes the intermediate logout confirmation
 MESSAGE_STORAGE = 'django.contrib.messages.storage.cookie.CookieStorage'
 ACCOUNT_SESSION_REMEMBER = True
+
+# Add to your existing settings.py
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'slack_events.log',
+        },
+    },
+    'loggers': {
+        'feedback.views': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+        },
+    },
+}
