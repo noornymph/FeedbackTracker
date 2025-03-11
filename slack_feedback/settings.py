@@ -32,7 +32,7 @@ ALLOWED_HOSTS = [
 ]
 
 # Site ID for Django Allauth
-SITE_ID = 4
+SITE_ID = 5
 
 # Authentication Redirects
 LOGIN_REDIRECT_URL = "/oauth/success/"
@@ -142,8 +142,12 @@ WSGI_APPLICATION = 'slack_feedback.wsgi.application'
 # Database Configuration (Default: SQLite)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'feedbacks',
+        'USER': 'postgres',
+        'PASSWORD': '',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 

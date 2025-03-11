@@ -20,7 +20,7 @@ class Feedback(models.Model):
 
 class Reaction(models.Model):
     feedback = models.ForeignKey(Feedback, on_delete=models.CASCADE, related_name="reactions")
-    reaction = models.CharField(max_length=50)
+    reaction = models.CharField(max_length=200)
 
     def __str__(self):
         return f"{self.reaction} on {self.feedback.message[:20]}"
