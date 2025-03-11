@@ -30,7 +30,7 @@ SITE_ID = 4
 
 # Authentication Redirects
 LOGIN_REDIRECT_URL = "/oauth/success/"
-LOGOUT_REDIRECT_URL = "http://localhost:5173/login"
+LOGOUT_REDIRECT_URL = "https://feedbackviewer.netlify.app/login"
 
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = "http"
 
@@ -169,16 +169,34 @@ STATIC_URL = 'static/'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS Headers
-CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
-CSRF_TRUSTED_ORIGINS = ["http://localhost:5173"]
-CORS_ALLOW_CREDENTIALS = True
-# You might want to change this to False in production and only use specific origins
-CORS_ALLOW_ALL_ORIGINS = True
+# Cookie Settings
+SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-site
+SESSION_COOKIE_SECURE = True      # Required when SameSite is 'None'
+CSRF_COOKIE_SAMESITE = 'None'    # Required for cross-site
+CSRF_COOKIE_SECURE = True        # Required when SameSite is 'None'
+SESSION_COOKIE_HTTPONLY = True
 
-# Session settings
-SESSION_COOKIE_SAMESITE = 'Lax'  # Use 'None' if your frontend and backend are on different domains
-SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+# CORS Settings
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    'https://feedbackviewer.netlify.app',
+    'http://localhost:5173',
+    'http://localhost:8000'
+]
+
+# For development only - remove in production
+CORS_ORIGIN_ALLOW_ALL = False
+
+# Update your CSRF settings
+CSRF_TRUSTED_ORIGINS = [
+    'https://feedbackviewer.netlify.app',
+    'http://localhost:5173',
+    'http://localhost:8000'
+]
+
+# Ensure cookies work on localhost
+CSRF_COOKIE_DOMAIN = None
+SESSION_COOKIE_DOMAIN = None
 
 # Add these settings
 SOCIALACCOUNT_LOGIN_ON_GET = True  # Removes the intermediate "Continue" page
