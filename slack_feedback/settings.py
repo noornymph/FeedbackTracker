@@ -36,7 +36,7 @@ SITE_ID = 4
 
 # Authentication Redirects
 LOGIN_REDIRECT_URL = "/oauth/success/"
-LOGOUT_REDIRECT_URL = "http://localhost:5173//login"
+LOGOUT_REDIRECT_URL = "http://localhost:5173/login"
 
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = "http"
 

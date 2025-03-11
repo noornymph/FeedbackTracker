@@ -101,31 +101,16 @@ def fetch_historical_data():
             reactions = fetch_reactions_for_message(slack_message_id)
             for reaction in reactions:
                 reaction_name = reaction['name']
-                for reaction_user_id in reaction.get('users', []):  
-                    try:
-                        # Get user info to store username
-                        reaction_user_info = fetch_user_info(reaction_user_id)
-                        reaction_username = reaction_user_info.get('user', {}).get('name', '')
-                        
-                        reaction_user, _ = SlackUser.objects.get_or_create(
-                            slack_id=reaction_user_id,
-                            defaults={'username': reaction_username}
-                        )
-                        
-                        # Update username if it's empty but we have it now
-                        if not reaction_user.username and reaction_username:
-                            reaction_user.username = reaction_username
-                            reaction_user.save()
-                            
-                        reaction_obj, created = Reaction.objects.get_or_create(
-                            feedback=feedback_message,
-                            user=reaction_user,
-                            reaction=reaction_name
-                        )
-                        if created:
-                            print(f"Created new Reaction: {reaction_obj.reaction} (ID: {reaction_obj.id})")
-                    except SlackUser.DoesNotExist:
-                        print(f"Skipping reaction {reaction_name} from user {reaction_user_id} as user does not exist.")
+                
+                try:
+                    # Simply store the reaction name
+                    Reaction.objects.get_or_create(
+                        feedback=feedback_message,
+                        reaction=reaction_name
+                    )
+                    print(f"Stored reaction {reaction_name}")
+                except Exception as e:
+                    print(f"Error storing reaction {reaction_name}: {str(e)}")
 
         # Handle pagination
         next_cursor = data.get('response_metadata', {}).get('next_cursor', '')

@@ -69,25 +69,17 @@ def slack_event_listener(request):
                     # Handle new reaction
                     slack_message_id = event.get('item', {}).get('ts')
                     reaction_name = event.get('reaction')
-                    reaction_user_id = event.get('user')
 
                     try:
                         # Get the related message
                         feedback_message = Feedback.objects.get(slack_message_id=slack_message_id)
                         
-                        # Get or create the reaction user
-                        reaction_user, _ = SlackUser.objects.get_or_create(
-                            slack_id=reaction_user_id,
-                            defaults={'username': ''}
-                        )
-
-                        # Create the reaction
-                        reaction, created = Reaction.objects.get_or_create(
+                        # Always create a new reaction entry
+                        reaction = Reaction.objects.create(
                             feedback=feedback_message,
-                            user=reaction_user,
                             reaction=reaction_name
                         )
-                        logger.info(f"{'Created' if created else 'Updated'} reaction: {reaction.id}")
+                        logger.info(f"Created reaction: {reaction.reaction}")
 
                     except Feedback.DoesNotExist:
                         logger.error(f"Message not found for reaction: {slack_message_id}")
@@ -96,22 +88,21 @@ def slack_event_listener(request):
                     # Handle reaction removal
                     slack_message_id = event.get('item', {}).get('ts')
                     reaction_name = event.get('reaction')
-                    reaction_user_id = event.get('user')
 
                     try:
                         feedback_message = Feedback.objects.get(slack_message_id=slack_message_id)
-                        reaction_user = SlackUser.objects.get(slack_id=reaction_user_id)
                         
-                        # Delete the reaction
-                        Reaction.objects.filter(
+                        # Delete one instance of the reaction
+                        reaction = Reaction.objects.filter(
                             feedback=feedback_message,
-                            user=reaction_user,
                             reaction=reaction_name
-                        ).delete()
-                        logger.info(f"Deleted reaction {reaction_name} from message {slack_message_id}")
+                        ).first()
+                        if reaction:
+                            reaction.delete()
+                            logger.info(f"Deleted reaction {reaction_name} from message {slack_message_id}")
 
-                    except (Feedback.DoesNotExist, SlackUser.DoesNotExist) as e:
-                        logger.error(f"Error removing reaction: {str(e)}")
+                    except Feedback.DoesNotExist:
+                        logger.error(f"Message not found for reaction: {slack_message_id}")
 
                 elif event_type == 'message' and event.get('subtype') == 'message_deleted':
                     # Handle message deletion
@@ -140,7 +131,7 @@ def get_mentions(request):
     """
     if request.method == 'GET':
         user_id = request.GET.get('user_id')
-        page = int(request.GET.get('page', 1))  # Default to page 1
+        page = int(request.GET.get('page', 1))
 
         if not user_id:
             return JsonResponse({"error": "User ID is required"}, status=400)
@@ -154,7 +145,7 @@ def get_mentions(request):
             feedback_qs = Feedback.objects.filter(id__in=mentioned_messages.values('feedback_id'))\
                 .order_by("timestamp")\
                 .prefetch_related(
-                    Prefetch('reactions', queryset=Reaction.objects.select_related('user')),
+                    'reactions',  # Simplified - no need to select_related('user') for reactions
                     Prefetch('tagged_users', queryset=TaggedUser.objects.select_related('user'))
                 ).select_related('sender', 'user')
 
@@ -185,7 +176,8 @@ def get_mentions(request):
                     except Exception as e:
                         print(f"Error processing mention for {mentioned_id}: {e}")
                 
-                reactions = [{"reaction": r.reaction, "user_id": r.user.slack_id, "username": r.user.username} for r in feedback.reactions.all()]
+                # Simplified reaction data - just return the reaction names
+                reactions = [{"reaction": r.reaction} for r in feedback.reactions.all()]
                 sender = {
                     "sender_id": feedback.sender.slack_id if feedback.sender else None,
                     "sender_username": feedback.sender.username if feedback.sender else "Unknown"
@@ -201,11 +193,11 @@ def get_mentions(request):
                 ]
                 
                 data.append({
-                    "message": processed_message,  # Use the processed message with usernames
-                    "original_message": feedback.message,  # Keep the original message for reference
+                    "message": processed_message,
+                    "original_message": feedback.message,
                     "timestamp": feedback.timestamp,
                     "mentioned_in": feedback.slack_message_id,
-                    "reactions": reactions,
+                    "reactions": reactions,  # Now just contains reaction names
                     "sender": sender,
                     "source": feedback.source,
                     "tagged_users": tagged_users,

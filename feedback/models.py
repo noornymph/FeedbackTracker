@@ -20,11 +20,10 @@ class Feedback(models.Model):
 
 class Reaction(models.Model):
     feedback = models.ForeignKey(Feedback, on_delete=models.CASCADE, related_name="reactions")
-    user = models.ForeignKey(SlackUser, on_delete=models.CASCADE)
     reaction = models.CharField(max_length=50)
 
     def __str__(self):
-        return f"{self.user.username} reacted with {self.reaction} on {self.feedback.message[:20]}"
+        return f"{self.reaction} on {self.feedback.message[:20]}"
 
 class TaggedUser(models.Model):
     feedback = models.ForeignKey(Feedback, on_delete=models.CASCADE, related_name="tagged_users")
